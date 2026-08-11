@@ -142,6 +142,16 @@ input,select,textarea{font-family:inherit;font-size:14px}
 .cardlim{height:7px;background:var(--card);border-radius:5px;overflow:hidden;margin-top:10px}
 .cardlim>div{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--acc),var(--acc2))}
 
+/* Contas bancárias */
+.acctrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;font-size:13.5px}
+.acctrow .an{display:flex;align-items:center;gap:9px;color:var(--txt);min-width:0}
+.acctrow .an small{color:var(--mut2);font-size:11px}
+.acctrow .adot{width:9px;height:9px;border-radius:3px;flex:none}
+.acctrow b{font-variant-numeric:tabular-nums}
+.acctedit{display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.acctedit:last-of-type{border-bottom:0}
+@media(max-width:560px){.acctedit{grid-template-columns:1fr 1fr;}.acctedit .adel{grid-column:2;justify-self:end}}
+
 /* Toggle de visão (lista/calendário) */
 .viewsw{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:3px}
 .viewsw button{background:transparent;border:0;color:var(--mut);font-weight:600;font-size:12.5px;padding:6px 11px;border-radius:7px;white-space:nowrap;transition:background .15s,color .15s}
@@ -521,6 +531,7 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
       </div>
     </div>
     <div class="fld hidden" id="mCardWrap"><label>Cartão</label><select id="mCard"></select></div>
+    <div class="fld hidden" id="mAccWrap"><label>Conta</label><select id="mAcc"></select></div>
     <div class="mact">
       <button class="btn danger sm hidden" id="mDelete">Excluir</button>
       <div class="spacer" style="flex:1"></div>
@@ -540,6 +551,25 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
     <button class="btn danger" id="bkReset" style="width:100%">🗑 Limpar mês atual</button>
     <input type="file" id="bkFile" accept=".json" class="hidden">
     <div class="mact"><button class="btn ghost" id="bkClose">Fechar</button></div>
+  </div>
+</div>
+
+<!-- Modal: contas bancárias -->
+<div class="ov" id="accModal">
+  <div class="modal" style="max-width:540px">
+    <h3>Contas bancárias</h3>
+    <p style="color:var(--mut);font-size:13px;margin:-8px 0 14px">Gerencie suas contas. O <b>saldo inicial</b> é o saldo da conta no começo do mês atual.</p>
+    <div id="accList"></div>
+    <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
+      <div style="font-weight:650;font-size:13px;margin-bottom:8px">Adicionar conta</div>
+      <div class="grid" style="grid-template-columns:1.2fr 1fr 1fr;gap:10px">
+        <input class="inp" id="aName" placeholder="Nome (ex.: Nubank)">
+        <input class="inp" id="aBank" placeholder="Banco (opcional)">
+        <input class="inp" id="aOpen" inputmode="decimal" placeholder="Saldo inicial">
+      </div>
+      <button class="btn" id="aAdd" style="margin-top:10px">＋ Adicionar conta</button>
+    </div>
+    <div class="mact"><button class="btn ghost" id="accClose">Fechar</button></div>
   </div>
 </div>
 
@@ -638,18 +668,23 @@ let CURRENT = null;
 let editingId = null;
 let editingType = "out";
 
-function emptyWs(){ // workspace vazio (um mês corrente)
+function emptyWs(){ // workspace vazio (um mês corrente, uma conta principal)
   const now=new Date(); const k=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
-  const months={}; months[k]={tx:[],openingBalance:0,budgets:{},cards:[]};
-  return {months, metas:[], bills:[]};
+  const months={}; months[k]={tx:[],opening:{},budgets:{},cards:[]};
+  return {months, metas:[], bills:[], accounts:[{id:"acc_main",nome:"Conta principal",banco:"",cor:"#2F74B5"}]};
 }
 function migrateCard(c){ return {id:uid(), name:c.name||"Cartão", final:c.final||"", limit:c.limit||0,
   dueDay:c.due?(parseInt(String(c.due).slice(-2),10)||8):8, closingDay:c.closing?(parseInt(String(c.closing).slice(-2),10)||null):null}; }
 function normWs(w){ if(!w||typeof w!=="object") w=emptyWs(); w.months=w.months||{}; w.metas=w.metas||[]; w.bills=w.bills||[];
+  if(!w.accounts||!w.accounts.length) w.accounts=[{id:"acc_main",nome:"Conta principal",banco:"",cor:"#2F74B5"}];
   if(!Object.keys(w.months).length) w.months=emptyWs().months;
-  Object.values(w.months).forEach(m=>{ // migra cartão único -> lista de cartões
+  const mainAcc=w.accounts[0].id;
+  Object.values(w.months).forEach(m=>{
     if(!m.cards){ if(m.card){ const nc=migrateCard(m.card); m.cards=[nc]; m.tx.forEach(t=>{ if(t.src==="card"&&!t.cardId) t.cardId=nc.id; }); }
       else m.cards=[]; delete m.card; }
+    if(m.opening===undefined){ m.opening=(typeof m.openingBalance==="number")?{[mainAcc]:m.openingBalance}:{}; }
+    delete m.openingBalance;
+    m.tx.forEach(t=>{ if(t.src!=="card" && !t.acc) t.acc=mainAcc; }); // liga lançamentos de banco/manual à conta
   });
   return w; }
 function S(){ return state.scope==="pj"?state.pj:state.pf; } // workspace ativo (PF ou PJ)
@@ -702,7 +737,7 @@ function seed(){ // app inicia VAZIO — pronto para receber um cliente (PF e PJ
 }
 function loadSampleData(){ // carrega a demonstração (julho/2026) sob demanda
   if(M() && M().tx.length && !confirm("Isto substitui os dados atuais pelos dados de exemplo. Continuar?")) return;
-  state=sampleState(); CURRENT="2026-07"; persist(); refreshMonths(); document.querySelectorAll("#scopeSw button").forEach(b=>b.classList.toggle("active",b.dataset.scope===state.scope)); renderActive(); toast("Dados de exemplo carregados");
+  state=normalizeState(sampleState()); CURRENT="2026-07"; persist(); refreshMonths(); document.querySelectorAll("#scopeSw button").forEach(b=>b.classList.toggle("active",b.dataset.scope===state.scope)); renderActive(); toast("Dados de exemplo carregados");
 }
 function resetAll(){ // limpa tudo para começar com um novo cliente
   if(!confirm("Apagar TODOS os dados e começar em branco (novo cliente)?")) return;
@@ -763,6 +798,7 @@ function sampleState(){
   return {
     owner:"Marina Costa Ribeiro", scope:"pf", pj:emptyWs(),
     pf:{
+    accounts:[{id:"acc_main", nome:"Banco Horizonte", banco:"Banco Horizonte", cor:"#2F74B5"}],
     months:{
       "2026-07":{
         tx,
@@ -815,14 +851,17 @@ function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg
 /* ============================ COMPUTE ============================ */
 function totals(){
   const m=M(); let inc=0,exp=0,spend={},bankIn=0,bankOut=0;
+  const accs=S().accounts||[]; const mainAcc=accs[0]?.id;
+  const accBal={}, accMov={}; accs.forEach(a=>{ accBal[a.id]=(m.opening&&m.opening[a.id])||0; accMov[a.id]=0; });
   m.tx.forEach(t=>{
-    if(t.type==="in"){ inc+=t.amount; if(t.src!=="card") bankIn+=t.amount; }
-    else{ exp+=t.amount; if(t.src!=="card") bankOut+=t.amount;
+    if(t.type==="in"){ inc+=t.amount; if(t.src!=="card"){ bankIn+=t.amount; const a=t.acc||mainAcc; if(a!=null){accBal[a]=(accBal[a]||0)+t.amount; accMov[a]=(accMov[a]||0)+t.amount;} } }
+    else{ exp+=t.amount; if(t.src!=="card"){ bankOut+=t.amount; const a=t.acc||mainAcc; if(a!=null){accBal[a]=(accBal[a]||0)-t.amount; accMov[a]=(accMov[a]||0)-t.amount;} }
       if(!CATS[t.cat]?.transfer){ spend[t.cat]=(spend[t.cat]||0)+t.amount; } }
   });
-  const balance = (m.openingBalance||0)+bankIn-bankOut;
+  const openingSum = Object.values(m.opening||{}).reduce((a,b)=>a+b,0);
+  const balance = Object.values(accBal).reduce((a,b)=>a+b,0);
   const consumo = Object.values(spend).reduce((a,b)=>a+b,0);
-  return {inc,exp,spend,consumo,balance,bankIn,bankOut};
+  return {inc,exp,spend,consumo,balance,bankIn,bankOut,accBal,accMov,openingSum};
 }
 
 /* ============================ RENDER: OVERVIEW ============================ */
@@ -853,9 +892,16 @@ function renderOverview(){
     <div class="bar"><div class="bn">Entradas</div><div class="bt"><div class="bf" style="width:${t.bankIn/mx*100}%;background:var(--pos)"></div></div><div class="bv pos">${fmt(t.bankIn)}</div></div>
     <div class="bar"><div class="bn">Saídas</div><div class="bt"><div class="bf" style="width:${t.bankOut/mx*100}%;background:var(--neg)"></div></div><div class="bv neg">${fmt(t.bankOut)}</div></div>
     <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between">
-      <span style="color:var(--mut)">Saldo inicial do mês</span><b>${fmt(m.openingBalance||0)}</b></div>
+      <span style="color:var(--mut)">Saldo inicial do mês</span><b>${fmt(t.openingSum)}</b></div>
     <div style="display:flex;justify-content:space-between;margin-top:8px">
-      <span style="color:var(--mut)">Saldo final</span><b class="${t.balance>=0?'pos':'neg'}">${fmt(t.balance)}</b></div>`;
+      <span style="color:var(--mut)">Saldo final</span><b class="${t.balance>=0?'pos':'neg'}">${fmt(t.balance)}</b></div>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="color:var(--mut2);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em">Contas bancárias</span>
+        <button class="btn ghost sm" id="btnAccounts">⚙️ Gerenciar</button></div>
+      ${(S().accounts||[]).map(a=>`<div class="acctrow"><span class="an"><span class="adot" style="background:${a.cor||'var(--acc)'}"></span>${a.nome}${a.banco&&a.banco!==a.nome?` <small>${a.banco}</small>`:""}</span><b class="${(t.accBal[a.id]||0)>=0?'':'neg'}">${fmt(t.accBal[a.id]||0)}</b></div>`).join("")}
+    </div>`;
+  const ba=document.getElementById("btnAccounts"); if(ba) ba.onclick=openAccounts;
 
   // top expenses
   const top=m.tx.filter(x=>x.type==="out"&&!CATS[x.cat]?.transfer).sort((a,b)=>b.amount-a.amount).slice(0,6);
@@ -892,7 +938,7 @@ function renderEvo(){
   const keys=Object.keys(S().months).sort();
   const data=keys.map(k=>{ const mm=S().months[k]; let bi=0,bo=0;
     mm.tx.forEach(t=>{ if(t.src!=="card"){ t.type==="in"?bi+=t.amount:bo+=t.amount; }});
-    return {k,bal:(mm.openingBalance||0)+bi-bo};});
+    return {k,bal:Object.values(mm.opening||{}).reduce((a,b)=>a+b,0)+bi-bo};});
   if(data.length<2){ document.getElementById("evo").innerHTML=`<div class="empty">Registre mais meses para ver a evolução</div>`; return; }
   const W=440,H=150,pad=30; const vals=data.map(d=>d.bal); const mn=Math.min(...vals,0),mx=Math.max(...vals);
   const x=i=>pad+i*(W-2*pad)/(data.length-1); const y=v=>H-pad-(v-mn)/((mx-mn)||1)*(H-2*pad);
@@ -1067,7 +1113,7 @@ function importParsed(items, srcLabel){
   items.forEach(it=>{ const k=monthKey(it.date); (byMonth[k]=byMonth[k]||[]).push(it); });
   let count=0, months=Object.keys(byMonth);
   months.forEach(k=>{
-    if(!S().months[k]) S().months[k]={tx:[],openingBalance:0,budgets:{},cards:[]};
+    if(!S().months[k]) S().months[k]={tx:[],opening:{},budgets:{},cards:[]};
     byMonth[k].forEach(it=>{ S().months[k].tx.push({id:uid(),...it}); count++; });
   });
   persist(); refreshMonths();
@@ -1166,7 +1212,7 @@ async function handlePDF(file){
     if(!items.length){ box.innerHTML=`<div class="note" style="border-left:3px solid var(--warn)">⚠️ Não consegui extrair lançamentos deste PDF. Tente o import por CSV.</div>`; return; }
     // opening balance / card meta
     if(isBank){ const sa=text.match(/saldo anterior[^0-9-]*(\d{1,3}(?:\.\d{3})*,\d{2})/i);
-      const k=monthKey(items[0].date); setTimeout(()=>{ if(sa&&S().months[k]) {S().months[k].openingBalance=parseVal(sa[1]); persist(); renderAll();} },50); }
+      const k=monthKey(items[0].date); setTimeout(()=>{ const mm=S().months[k], ma=(S().accounts[0]||{}).id; if(sa&&mm&&ma){ mm.opening=mm.opening||{}; mm.opening[ma]=parseVal(sa[1]); persist(); renderAll(); } },50); }
     importParsed(items, isCard?"fatura de cartão":"extrato bancário");
   }catch(e){
     box.innerHTML=`<div class="note" style="border-left:3px solid var(--neg)">❌ Falha ao ler PDF (${e.message||e}). Use o import por CSV — funciona offline.</div>`;
@@ -1205,12 +1251,16 @@ function setType(t){ editingType=t;
   document.getElementById("mTypeIn").style.background=t==="in"?"var(--pos)":"";
   document.getElementById("mTypeIn").style.borderColor=t==="in"?"var(--pos)":"";
 }
-function syncCardField(selCardId){
-  const wrap=document.getElementById("mCardWrap"), sel=document.getElementById("mCard");
-  const cards=M().cards||[];
-  sel.innerHTML=cards.length?cards.map(c=>`<option value="${c.id}">${c.name}${c.final?" ••"+c.final:""}</option>`).join(""):`<option value="">(nenhum cartão cadastrado)</option>`;
-  if(selCardId) sel.value=selCardId;
-  wrap.classList.toggle("hidden", document.getElementById("mSrc").value!=="card");
+function syncCardField(selCardId, selAccId){
+  const src=document.getElementById("mSrc").value;
+  const cwrap=document.getElementById("mCardWrap"), csel=document.getElementById("mCard");
+  const awrap=document.getElementById("mAccWrap"), asel=document.getElementById("mAcc");
+  const cards=M().cards||[], accs=S().accounts||[];
+  csel.innerHTML=cards.length?cards.map(c=>`<option value="${c.id}">${c.name}${c.final?" ••"+c.final:""}</option>`).join(""):`<option value="">(nenhum cartão cadastrado)</option>`;
+  asel.innerHTML=accs.map(a=>`<option value="${a.id}">${a.nome}</option>`).join("");
+  if(selCardId) csel.value=selCardId; if(selAccId) asel.value=selAccId;
+  cwrap.classList.toggle("hidden", src!=="card");
+  awrap.classList.toggle("hidden", src==="card");
 }
 function openTx(id){
   editingId=id||null;
@@ -1224,7 +1274,7 @@ function openTx(id){
     document.getElementById("mVal").value=""; sel.value="outros"; document.getElementById("mSrc").value="manual";
     setType("out"); document.getElementById("mDelete").classList.add("hidden");
   }
-  syncCardField(id?(M().tx.find(x=>x.id===id)||{}).cardId:null);
+  { const et=id?(M().tx.find(x=>x.id===id)||{}):{}; syncCardField(et.cardId, et.acc); }
   document.getElementById("txModal").classList.add("on");
 }
 function saveTx(){
@@ -1233,14 +1283,15 @@ function saveTx(){
   if(!date||!amount){ toast("Preencha data e valor"); return; }
   const cat=document.getElementById("mCat").value, src=document.getElementById("mSrc").value;
   const cardId=(src==="card")?(document.getElementById("mCard").value||undefined):undefined;
+  const acc=(src!=="card")?(document.getElementById("mAcc").value||undefined):undefined;
   const k=monthKey(date);
-  if(!S().months[k]) S().months[k]={tx:[],openingBalance:0,budgets:{},cards:[]};
+  if(!S().months[k]) S().months[k]={tx:[],opening:{},budgets:{},cards:[]};
   if(editingId){ // could move month
     const cur=M(); const i=cur.tx.findIndex(x=>x.id===editingId); const old=cur.tx[i];
     cur.tx.splice(i,1);
-    S().months[k].tx.push({id:editingId,desc,date,amount,type:editingType,cat,src,cardId,mcc:old.mcc});
+    S().months[k].tx.push({id:editingId,desc,date,amount,type:editingType,cat,src,cardId,acc,mcc:old.mcc});
   } else {
-    S().months[k].tx.push({id:uid(),desc,date,amount,type:editingType,cat,src,cardId});
+    S().months[k].tx.push({id:uid(),desc,date,amount,type:editingType,cat,src,cardId,acc});
   }
   persist(); refreshMonths(); document.getElementById("txModal").classList.remove("on"); renderAll(); toast("Salvo");
 }
@@ -1433,6 +1484,42 @@ function delMeta(id){
   S().metas=(S().metas||[]).filter(g=>g.id!==id); persist(); renderMetas(); toast("Meta removida");
 }
 
+/* ============================ CONTAS BANCÁRIAS ============================ */
+function openAccounts(){ renderAccList(); document.getElementById("accModal").classList.add("on"); }
+function renderAccList(){
+  const accs=S().accounts||[]; const m=M(); const box=document.getElementById("accList");
+  box.innerHTML=accs.map(a=>{
+    const op=(m.opening&&m.opening[a.id])||0;
+    return `<div class="acctedit">
+      <input class="inp" data-aname="${a.id}" value="${a.nome}" placeholder="Nome">
+      <input class="inp" data-abank="${a.id}" value="${a.banco||''}" placeholder="Banco">
+      <input class="inp" data-aopen="${a.id}" inputmode="decimal" value="${fmtShort(op)}" title="Saldo inicial do mês">
+      <button class="rowbtn adel" data-adel="${a.id}" title="Remover conta">🗑</button>
+    </div>`;
+  }).join("")||`<div class="empty">Nenhuma conta.</div>`;
+  box.querySelectorAll("[data-aname]").forEach(i=>i.onchange=()=>{ const a=(S().accounts||[]).find(x=>x.id===i.dataset.aname); if(a){a.nome=i.value.trim()||a.nome;} persist(); renderActive(); });
+  box.querySelectorAll("[data-abank]").forEach(i=>i.onchange=()=>{ const a=(S().accounts||[]).find(x=>x.id===i.dataset.abank); if(a){a.banco=i.value.trim();} persist(); renderActive(); });
+  box.querySelectorAll("[data-aopen]").forEach(i=>i.onchange=()=>{ const mm=M(); mm.opening=mm.opening||{}; mm.opening[i.dataset.aopen]=parseVal(i.value); persist(); renderActive(); });
+  box.querySelectorAll("[data-adel]").forEach(b=>b.onclick=()=>delAccount(b.dataset.adel));
+}
+function addAccount(){
+  const nome=document.getElementById("aName").value.trim(); if(!nome){ toast("Informe o nome da conta"); return; }
+  const banco=document.getElementById("aBank").value.trim(); const op=parseVal(document.getElementById("aOpen").value);
+  const cores=["#2F74B5","#38B6E6","#8A05BE","#3ec98a","#ffb454","#ff6b7d"]; const cor=cores[(S().accounts||[]).length%cores.length];
+  const id="acc_"+uid(); S().accounts=S().accounts||[]; S().accounts.push({id,nome,banco,cor});
+  if(op){ M().opening=M().opening||{}; M().opening[id]=op; }
+  ["aName","aBank","aOpen"].forEach(x=>document.getElementById(x).value="");
+  persist(); renderAccList(); renderActive(); toast("Conta adicionada");
+}
+function delAccount(id){
+  if((S().accounts||[]).length<=1){ toast("Deixe ao menos uma conta"); return; }
+  if(!confirm("Remover esta conta? Os lançamentos dela passam para a primeira conta.")) return;
+  const accs=(S().accounts||[]).filter(a=>a.id!==id); const fallback=accs[0].id;
+  Object.values(S().months).forEach(m=>{ m.tx.forEach(t=>{ if(t.acc===id) t.acc=fallback; });
+    if(m.opening&&m.opening[id]!=null){ m.opening[fallback]=(m.opening[fallback]||0)+m.opening[id]; delete m.opening[id]; } });
+  S().accounts=accs; persist(); renderAccList(); renderActive(); toast("Conta removida");
+}
+
 /* ============================ EVENTS ============================ */
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>showTab(b.dataset.t));
 document.querySelectorAll("#scopeSw button").forEach(b=>b.onclick=()=>switchScope(b.dataset.scope));
@@ -1441,7 +1528,7 @@ document.getElementById("addMonth").onclick=()=>{
   const d=new Date(CURRENT+"-01T12:00"); d.setMonth(d.getMonth()+1);
   const k=d.toISOString().slice(0,7);
   if(!S().months[k]){ const prev=S().months[CURRENT]; const t=totals();
-    S().months[k]={tx:[],openingBalance:t.balance,budgets:{...(prev.budgets||{})},cards:(prev.cards||[]).map(c=>({...c}))}; persist(); }
+    S().months[k]={tx:[],opening:{...t.accBal},budgets:{...(prev.budgets||{})},cards:(prev.cards||[]).map(c=>({...c}))}; persist(); }
   CURRENT=k; refreshMonths(); renderActive(); toast("Mês "+monthLabel(k)+" criado (saldo inicial herdado)");
 };
 document.getElementById("btnAdd").onclick=()=>openTx(null);
@@ -1485,6 +1572,9 @@ document.getElementById("demoModal").onclick=e=>{ if(e.target.id==="demoModal")e
 // backup
 document.getElementById("btnBackup").onclick=()=>document.getElementById("bkModal").classList.add("on");
 document.getElementById("bkClose").onclick=()=>document.getElementById("bkModal").classList.remove("on");
+document.getElementById("aAdd").onclick=addAccount;
+document.getElementById("accClose").onclick=()=>document.getElementById("accModal").classList.remove("on");
+document.getElementById("accModal").onclick=e=>{ if(e.target.id==="accModal")e.target.classList.remove("on"); };
 document.getElementById("bkExport").onclick=()=>dl("backup-financeiro-"+CURRENT+".json",JSON.stringify(state,null,2),"application/json");
 document.getElementById("bkImportBtn").onclick=()=>document.getElementById("bkFile").click();
 document.getElementById("bkFile").onchange=e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); document.getElementById("bkModal").classList.remove("on"); };
