@@ -51,6 +51,19 @@ input,select,textarea{font-family:inherit;font-size:14px}
   width:38px;height:38px;display:grid;place-items:center;font-size:16px}
 .iconbtn:hover{border-color:var(--electric);color:var(--electric)}
 
+/* Botão DEMO */
+.demo-btn{background:linear-gradient(135deg,var(--electric),var(--steel));border:0;color:#04121f;font-weight:750;
+  font-size:12.5px;letter-spacing:.3px;padding:9px 14px;border-radius:11px;box-shadow:0 4px 14px rgba(56,182,230,.35)}
+.demo-btn:hover{filter:brightness(1.08)}
+/* Guia DEMO */
+.guide{display:flex;flex-direction:column;gap:2px}
+.gstep{display:flex;gap:12px;padding:11px 4px;border-bottom:1px solid var(--line)}
+.gstep:last-child{border-bottom:0}
+.gstep .gi{font-size:20px;flex:none;width:30px;text-align:center}
+.gstep .gt{font-weight:650;font-size:13.5px;margin-bottom:2px}
+.gstep .gd{color:var(--mut);font-size:12.5px}
+.gbadge{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:7px;padding:1px 7px;font-size:11px;color:var(--mut);font-weight:600}
+
 /* Rodapé da marca */
 .foot{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);display:flex;align-items:center;
   justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--mut2);font-size:12px}
@@ -159,6 +172,7 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
       <select id="monthSel"></select>
       <button class="iconbtn" id="addMonth" title="Novo mês" style="width:30px;height:30px;font-size:18px">＋</button>
     </div>
+    <button class="demo-btn" id="btnDemo" title="Como usar o painel">✨ DEMO</button>
     <button class="iconbtn" id="btnBackup" title="Backup / Restaurar">⇩</button>
   </div>
 
@@ -340,6 +354,26 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
   </div>
 </div>
 
+<!-- Modal: guia DEMO -->
+<div class="ov" id="demoModal">
+  <div class="modal" style="max-width:520px">
+    <h3 style="margin-bottom:6px">✨ Bem-vindo ao Assistente Financeiro</h3>
+    <p style="color:var(--mut);font-size:13px;margin:0 0 10px">Seu painel financeiro, organizado por mês. Veja como usar em 1 minuto:</p>
+    <div class="guide">
+      <div class="gstep"><div class="gi">📥</div><div><div class="gt">1. Importe ou lance</div><div class="gd">Na aba <span class="gbadge">Importar</span>, anexe sua fatura/extrato (PDF ou CSV) — o sistema lê e categoriza sozinho. Ou cadastre manualmente em <span class="gbadge">Lançamentos → ＋</span>.</div></div></div>
+      <div class="gstep"><div class="gi">📊</div><div><div class="gt">2. Acompanhe a Visão Geral</div><div class="gd">Receitas, despesas, resultado do mês, saldo em conta e os gastos por categoria — tudo automático.</div></div></div>
+      <div class="gstep"><div class="gi">💳</div><div><div class="gt">3. Controle o cartão</div><div class="gd">Na aba <span class="gbadge">Cartão</span>, veja a fatura, o limite usado/disponível e os gastos por ramo.</div></div></div>
+      <div class="gstep"><div class="gi">🎯</div><div><div class="gt">4. Defina o orçamento</div><div class="gd">Em <span class="gbadge">Orçamento</span>, estabeleça metas por categoria e acompanhe o realizado.</div></div></div>
+      <div class="gstep"><div class="gi">🗓️</div><div><div class="gt">5. Cada mês é um módulo</div><div class="gd">Troque o mês no topo; crie o próximo no botão <span class="gbadge">＋</span> (o saldo inicial é herdado).</div></div></div>
+    </div>
+    <div class="note" style="margin-top:14px">Quer explorar com dados de exemplo? Carregamos um mês fictício para você navegar — depois é só limpar para o uso real.</div>
+    <div class="mact">
+      <button class="btn ghost" id="demoClose">Começar do zero</button>
+      <button class="btn" id="demoLoad">▶ Explorar com exemplo</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -408,7 +442,8 @@ function categorize(desc, mcc, type){
 }
 
 /* ============================ STATE ============================ */
-const LS = "af_state_v2";
+// Chave de armazenamento — isola por cliente quando servido com ?c=<id> (ex.: na Área do Cliente)
+const LS = (()=>{ try{ const p=new URLSearchParams(location.search).get("c"); return "af_state_v2"+(p?("_"+p.replace(/[^a-z0-9]/gi,"")):""); }catch(e){ return "af_state_v2"; } })();
 let state = load();
 let CURRENT = null;
 let editingId = null;
@@ -919,6 +954,12 @@ document.getElementById("csvTemplate").onclick=()=>{
   dl("modelo-lancamentos.csv",csv,"text/csv");
 };
 
+// guia DEMO
+document.getElementById("btnDemo").onclick=()=>document.getElementById("demoModal").classList.add("on");
+document.getElementById("demoClose").onclick=()=>document.getElementById("demoModal").classList.remove("on");
+document.getElementById("demoLoad").onclick=()=>{ document.getElementById("demoModal").classList.remove("on"); loadSampleData(); };
+document.getElementById("demoModal").onclick=e=>{ if(e.target.id==="demoModal")e.target.classList.remove("on"); };
+
 // backup
 document.getElementById("btnBackup").onclick=()=>document.getElementById("bkModal").classList.add("on");
 document.getElementById("bkClose").onclick=()=>document.getElementById("bkModal").classList.remove("on");
@@ -936,6 +977,8 @@ function dl(name,content,type){ const b=new Blob([content],{type}); const u=URL.
 /* ============================ INIT ============================ */
 refreshMonths();
 showTab("overview");
+// Abre o guia automaticamente no primeiro acesso quando o painel está vazio
+try{ if(!localStorage.getItem("af_seen_guide") && (!M()||!M().tx.length)){ document.getElementById("demoModal").classList.add("on"); localStorage.setItem("af_seen_guide","1"); } }catch(e){}
 </script>
 </body>
 </html>
