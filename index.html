@@ -135,6 +135,28 @@ input,select,textarea{font-family:inherit;font-size:14px}
 .cardlim{height:7px;background:var(--card);border-radius:5px;overflow:hidden;margin-top:10px}
 .cardlim>div{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--acc),var(--acc2))}
 
+/* Toggle de visão (lista/calendário) */
+.viewsw{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.viewsw button{background:transparent;border:0;color:var(--mut);font-weight:600;font-size:12.5px;padding:6px 11px;border-radius:7px;white-space:nowrap;transition:background .15s,color .15s}
+.viewsw button.active{background:var(--acc);color:#fff}
+.viewsw button:not(.active):hover{color:var(--txt)}
+
+/* Calendário */
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.cal .cwd{text-align:center;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--mut2);padding:4px 0}
+.calday{min-height:80px;border:1px solid var(--line);border-radius:10px;padding:7px 8px;background:var(--card2);cursor:pointer;display:flex;flex-direction:column;gap:2px;transition:border-color .15s,transform .1s}
+.calday:hover{border-color:var(--acc2);transform:translateY(-1px)}
+.calday.empty{background:transparent;border:0;cursor:default}
+.calday.empty:hover{transform:none}
+.calday .cd{font-size:12px;font-weight:700;color:var(--mut)}
+.calday.today{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc) inset}
+.calday.today .cd{color:var(--acc2)}
+.calday .cin{font-size:11px;font-weight:700;color:var(--pos);font-variant-numeric:tabular-nums}
+.calday .cout{font-size:11px;font-weight:700;color:var(--neg);font-variant-numeric:tabular-nums}
+.calday .cdots{display:flex;gap:3px;flex-wrap:wrap;margin-top:auto}
+.calday .cdot{width:6px;height:6px;border-radius:50%}
+@media(max-width:640px){.calday{min-height:58px}.calday .cin,.calday .cout{font-size:9.5px}}
+
 /* Rodapé da marca */
 .foot{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);display:flex;align-items:center;
   justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--mut2);font-size:12px}
@@ -327,6 +349,10 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
           <option value="card">Cartão</option>
           <option value="manual">Manual</option>
         </select>
+        <div class="viewsw" id="txViewSw">
+          <button data-view="list" class="active">☰ Lista</button>
+          <button data-view="cal">📅 Calendário</button>
+        </div>
         <button class="btn" id="btnAdd">＋ Lançamento</button>
       </div>
       <div id="txTable"></div>
@@ -854,7 +880,34 @@ function fillCatSelect(sel,includeAll){
   sel.innerHTML=(includeAll?`<option value="">Todas categorias</option>`:"")+
     Object.entries(CATS).map(([k,c])=>`<option value="${k}">${c.label}</option>`).join("");
 }
+let txView="list";
+function renderCalendar(){
+  const m=M(); const [y,mm]=CURRENT.split("-").map(Number);
+  const first=new Date(y,mm-1,1).getDay();
+  const days=daysInMonth(CURRENT);
+  const now=new Date(); const realKey=now.getFullYear()+"-"+pad2(now.getMonth()+1);
+  const isThisMonth=CURRENT===realKey, today=now.getDate();
+  const byDay={}; m.tx.forEach(t=>{ const d=parseInt(t.date.slice(-2),10); (byDay[d]=byDay[d]||[]).push(t); });
+  const wd=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+  let cells=wd.map(w=>`<div class="cwd">${w}</div>`).join("");
+  for(let i=0;i<first;i++) cells+=`<div class="calday empty"></div>`;
+  for(let d=1;d<=days;d++){
+    const items=byDay[d]||[]; let cin=0,cout=0;
+    items.forEach(t=>t.type==="in"?cin+=t.amount:cout+=t.amount);
+    const dots=items.slice(0,6).map(t=>`<span class="cdot" style="background:${CATS[t.cat]?.color||'var(--mut2)'}"></span>`).join("");
+    cells+=`<div class="calday ${isThisMonth&&d===today?'today':''}" data-day="${d}" title="${items.length} lançamento(s)">
+      <div class="cd">${d}</div>
+      ${cin?`<div class="cin">+${fmtShort(cin)}</div>`:""}
+      ${cout?`<div class="cout">−${fmtShort(cout)}</div>`:""}
+      <div class="cdots">${dots}</div>
+    </div>`;
+  }
+  const box=document.getElementById("txTable");
+  box.innerHTML=`<div class="cal">${cells}</div><div style="color:var(--mut2);font-size:12px;margin-top:12px;text-align:center">Clique em um dia para lançar algo nele.</div>`;
+  box.querySelectorAll("[data-day]").forEach(el=>el.onclick=()=>{ openTx(null); document.getElementById("mDate").value=CURRENT+"-"+pad2(parseInt(el.dataset.day,10)); });
+}
 function renderTx(){
+  if(txView==="cal"){ renderCalendar(); return; }
   const m=M();
   const q=document.getElementById("txSearch").value.toLowerCase();
   const fc=document.getElementById("txCat").value, ft=document.getElementById("txType").value, fs=document.getElementById("txSrc").value;
@@ -1357,6 +1410,8 @@ document.getElementById("bAdd").onclick=addBill;
 document.getElementById("gAdd").onclick=addMeta;
 fillCatSelect(document.getElementById("bCat"),false); document.getElementById("bCat").value="contas";
 ["txSearch","txCat","txType","txSrc"].forEach(id=>document.getElementById(id).oninput=renderTx);
+document.querySelectorAll("#txViewSw button").forEach(b=>b.onclick=()=>{ txView=b.dataset.view;
+  document.querySelectorAll("#txViewSw button").forEach(x=>x.classList.toggle("active",x===b)); renderTx(); });
 document.getElementById("txCat").innerHTML=`<option value="">Todas categorias</option>`+Object.entries(CATS).map(([k,c])=>`<option value="${k}">${c.label}</option>`).join("");
 document.getElementById("mCancel").onclick=()=>document.getElementById("txModal").classList.remove("on");
 document.getElementById("mSave").onclick=saveTx;
