@@ -64,6 +64,41 @@ input,select,textarea{font-family:inherit;font-size:14px}
 .gstep .gd{color:var(--mut);font-size:12.5px}
 .gbadge{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:7px;padding:1px 7px;font-size:11px;color:var(--mut);font-weight:600}
 
+/* Saudação + gamificação */
+.greet{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 18px;box-shadow:var(--sh);margin-bottom:14px}
+.greet .g1{font-size:18px;font-weight:700}
+.greet .g2{color:var(--mut);font-size:12.5px;margin-top:2px}
+.badges{display:flex;gap:8px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;gap:7px;background:var(--card2);border:1px solid var(--line);
+  border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:650}
+.badge.hot{color:var(--warn)} .badge.ok{color:var(--pos)}
+
+/* Contas a pagar / vencimentos */
+.billrow{display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid var(--line)}
+.billrow:last-child{border-bottom:0}
+.billrow .bi{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;font-size:15px;background:var(--card2)}
+.billrow .bd{flex:1;min-width:0}
+.billrow .bd .t{font-weight:650;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.billrow .bd .s{color:var(--mut);font-size:11.5px;margin-top:1px}
+.billrow .bval{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stt{font-size:10.5px;font-weight:750;text-transform:uppercase;letter-spacing:.03em;padding:3px 8px;border-radius:20px;white-space:nowrap}
+.stt.pend{color:var(--mut2);background:var(--card2)}
+.stt.due{color:var(--warn);background:rgba(255,180,84,.14)}
+.stt.over{color:var(--neg);background:rgba(255,107,125,.14)}
+.stt.paid{color:var(--pos);background:rgba(62,201,138,.14)}
+
+/* Metas */
+.metaitem{padding:12px 2px;border-bottom:1px solid var(--line)}
+.metaitem:last-child{border-bottom:0}
+.metaitem .mh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:7px}
+.metaitem .mn{font-weight:650;font-size:14px}
+.metaitem .mv{font-size:12.5px;color:var(--mut);font-variant-numeric:tabular-nums}
+.metaitem .mv b{color:var(--txt)}
+.mprog{height:10px;background:var(--card2);border-radius:6px;overflow:hidden}
+.mprog>div{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--acc),var(--acc2))}
+.mmeta{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap}
+
 /* Rodapé da marca */
 .foot{margin-top:34px;padding-top:18px;border-top:1px solid var(--line);display:flex;align-items:center;
   justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--mut2);font-size:12px}
@@ -180,12 +215,15 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
     <button class="tab active" data-t="overview">📊 Visão Geral</button>
     <button class="tab" data-t="tx">📋 Lançamentos</button>
     <button class="tab" data-t="card">💳 Cartão</button>
+    <button class="tab" data-t="bills">🔔 Contas a pagar</button>
     <button class="tab" data-t="budget">🎯 Orçamento</button>
+    <button class="tab" data-t="metas">🏆 Metas</button>
     <button class="tab" data-t="import">📥 Importar</button>
   </div>
 
   <!-- OVERVIEW -->
   <section id="v-overview">
+    <div id="ovHead"></div>
     <div class="grid kpis" id="kpis" style="margin-bottom:14px"></div>
     <div class="grid two" style="margin-bottom:14px">
       <div class="card">
@@ -198,6 +236,16 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
       <div class="card">
         <h3>Entradas × Saídas <span class="hint">conta corrente</span></h3>
         <div id="inout"></div>
+      </div>
+    </div>
+    <div class="grid two" style="margin-bottom:14px">
+      <div class="card">
+        <h3>Próximos vencimentos <span class="hint">contas do mês</span></h3>
+        <div id="ovBills"></div>
+      </div>
+      <div class="card">
+        <h3>Metas <span class="hint">objetivos</span></h3>
+        <div id="ovMetas"></div>
       </div>
     </div>
     <div class="grid two">
@@ -255,6 +303,48 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
     <div class="card">
       <h3>Orçamento por categoria <span class="hint">meta mensal × realizado</span></h3>
       <div id="budgetList"></div>
+    </div>
+  </section>
+
+  <!-- BILLS -->
+  <section id="v-bills" class="hidden">
+    <div class="grid kpis" id="billKpis" style="margin-bottom:14px"></div>
+    <div class="grid two">
+      <div class="card">
+        <h3>Contas a pagar <span class="hint">recorrentes / mensais</span></h3>
+        <div id="billsTable"></div>
+      </div>
+      <div class="card">
+        <h3>Adicionar conta a pagar</h3>
+        <div class="fld"><label>Descrição</label><input class="inp" id="bDesc" placeholder="Ex.: Aluguel, Energia, Internet..." style="width:100%"></div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
+          <div class="fld"><label>Valor (R$)</label><input class="inp" id="bVal" inputmode="decimal" placeholder="0,00"></div>
+          <div class="fld"><label>Dia do vencimento</label><input class="inp" id="bDay" type="number" min="1" max="31" placeholder="5"></div>
+        </div>
+        <div class="fld"><label>Categoria</label><select id="bCat"></select></div>
+        <button class="btn" id="bAdd">＋ Adicionar</button>
+        <div class="note">As contas se repetem todo mês no dia informado. Ao marcar “Pago”, a despesa é lançada automaticamente no mês atual.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- METAS -->
+  <section id="v-metas" class="hidden">
+    <div class="grid two">
+      <div class="card">
+        <h3>Minhas metas <span class="hint">quanto falta para cada objetivo</span></h3>
+        <div id="metasList"></div>
+      </div>
+      <div class="card">
+        <h3>Nova meta</h3>
+        <div class="fld"><label>Nome do objetivo</label><input class="inp" id="gName" placeholder="Ex.: Reserva de emergência, Viagem..." style="width:100%"></div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
+          <div class="fld"><label>Valor-alvo (R$)</label><input class="inp" id="gAlvo" inputmode="decimal" placeholder="0,00"></div>
+          <div class="fld"><label>Já guardado (R$)</label><input class="inp" id="gGuardado" inputmode="decimal" placeholder="0,00"></div>
+        </div>
+        <button class="btn" id="gAdd">＋ Criar meta</button>
+        <div class="note">Registre quanto já guardou; a barra mostra o progresso até o alvo.</div>
+      </div>
     </div>
   </section>
 
@@ -450,7 +540,7 @@ let editingId = null;
 let editingType = "out";
 
 function load(){
-  try{ const s = JSON.parse(localStorage.getItem(LS)); if(s && s.months) return s; }catch(e){}
+  try{ const s = JSON.parse(localStorage.getItem(LS)); if(s && s.months){ s.metas=s.metas||[]; s.bills=s.bills||[]; return s; } }catch(e){}
   return seed();
 }
 function persist(){ localStorage.setItem(LS, JSON.stringify(state)); }
@@ -460,7 +550,7 @@ function seed(){ // app inicia VAZIO — pronto para receber um cliente
   const now=new Date();
   const k=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const months={}; months[k]={tx:[],openingBalance:0,budgets:{},card:null};
-  return {owner:"", months};
+  return {owner:"", months, metas:[], bills:[]};
 }
 function loadSampleData(){ // carrega a demonstração (julho/2026) sob demanda
   if(M() && M().tx.length && !confirm("Isto substitui os dados atuais pelos dados de exemplo. Continuar?")) return;
@@ -532,7 +622,20 @@ function sampleState(){
               prev:2187.43, total:2454.77, limit:12000, used:2454.77},
         budgets:{}
       }
-    }
+    },
+    bills:[
+      {id:uid(),desc:"Aluguel",valor:2300,cat:"moradia",dia:1,paid:{}},
+      {id:uid(),desc:"Condomínio",valor:480,cat:"moradia",dia:2,paid:{}},
+      {id:uid(),desc:"Internet (Vivo Fibra)",valor:129.90,cat:"contas",dia:3,paid:{}},
+      {id:uid(),desc:"Energia (Enel)",valor:187.42,cat:"contas",dia:6,paid:{}},
+      {id:uid(),desc:"Academia (SmartFit)",valor:119.90,cat:"saude",dia:10,paid:{}},
+      {id:uid(),desc:"Plano de saúde (Unimed)",valor:689,cat:"saude",dia:17,paid:{}},
+      {id:uid(),desc:"Seguro do carro (Porto)",valor:245.60,cat:"seguros",dia:24,paid:{}},
+    ],
+    metas:[
+      {id:uid(),nome:"Reserva de emergência",alvo:20000,guardado:8500},
+      {id:uid(),nome:"Viagem de fim de ano",alvo:6000,guardado:1800},
+    ]
   };
 }
 
@@ -613,6 +716,8 @@ function renderOverview(){
       <div class="bt"><div class="bf" style="width:${x.amount/tmx*100}%;background:${CATS[x.cat].color}"></div></div>
       <div class="bv">${fmt(x.amount)}</div></div>`).join("") : `<div class="empty">Sem despesas</div>`;
 
+  // saudação + resumos de contas a pagar e metas
+  renderGreet(); renderOvBills(); renderOvMetas();
   // evolution
   renderEvo();
 }
@@ -908,16 +1013,173 @@ function refreshMonths(){
 let activeTab="overview";
 function showTab(t){ activeTab=t;
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.t===t));
-  ["overview","tx","card","budget","import"].forEach(v=>document.getElementById("v-"+v).classList.toggle("hidden",v!==t));
+  ["overview","tx","card","bills","budget","metas","import"].forEach(v=>document.getElementById("v-"+v).classList.toggle("hidden",v!==t));
   renderActive();
 }
 function renderActive(){
   if(activeTab==="overview")renderOverview();
   else if(activeTab==="tx")renderTx();
   else if(activeTab==="card")renderCard();
+  else if(activeTab==="bills")renderBills();
   else if(activeTab==="budget")renderBudget();
+  else if(activeTab==="metas")renderMetas();
 }
 function renderAll(){ refreshMonths(); renderActive(); if(activeTab!=="overview"){} }
+
+/* ============================ SAUDAÇÃO + GAMIFICAÇÃO ============================ */
+function pad2(n){ return String(n).padStart(2,"0"); }
+function nomeCliente(){ try{ const p=new URLSearchParams(location.search).get("nome"); if(p) return p; }catch(e){} return state.owner||""; }
+function monthNet(key){ const m=state.months[key]; if(!m) return 0; let bi=0,bo=0;
+  m.tx.forEach(t=>{ if(t.src!=="card"){ t.type==="in"?bi+=t.amount:bo+=t.amount; }}); return bi-bo; }
+function streakAzul(){
+  const keys=Object.keys(state.months).sort(); const idx=keys.indexOf(CURRENT); if(idx<0) return 0;
+  let s=0; for(let i=idx;i>=0;i--){ const m=state.months[keys[i]]; if(m.tx.length && monthNet(keys[i])>=0) s++; else break; }
+  return s;
+}
+function renderGreet(){
+  const el=document.getElementById("ovHead"); if(!el) return;
+  const h=new Date().getHours(); const per=h<12?"Bom dia":(h<18?"Boa tarde":"Boa noite");
+  const nome=nomeCliente(); const ola=nome?`${per}, ${nome.split(" ")[0]}! 👋`:`${per}! 👋`;
+  const badges=[]; const st=streakAzul();
+  if(st>=1) badges.push(`<span class="badge hot">🔥 ${st} ${st===1?"mês":"meses"} no azul</span>`);
+  const t=totals(), m=M(); let over=false, hasBudget=false;
+  Object.entries(m.budgets||{}).forEach(([c,g])=>{ if(g>0){hasBudget=true; if((t.spend[c]||0)>g)over=true;} });
+  if(hasBudget && !over) badges.push(`<span class="badge ok">🎯 orçamento em dia</span>`);
+  const bills=state.bills||[]; if(bills.length){ const pagas=bills.filter(b=>b.paid&&b.paid[CURRENT]).length;
+    badges.push(`<span class="badge">🔔 ${pagas}/${bills.length} contas pagas</span>`); }
+  el.innerHTML=`<div class="greet"><div><div class="g1">${ola}</div><div class="g2">Resumo de ${monthLabelLong(CURRENT)}.</div></div><div class="badges">${badges.join("")}</div></div>`;
+}
+
+/* ============================ CONTAS A PAGAR ============================ */
+function daysInMonth(key){ const [y,mm]=key.split("-").map(Number); return new Date(y,mm,0).getDate(); }
+function billDue(bill,key){ const d=Math.min(bill.dia||1, daysInMonth(key)); return key+"-"+pad2(d); }
+function billState(bill){
+  if(bill.paid && bill.paid[CURRENT]) return {k:"paid",label:"Pago"};
+  const due=billDue(bill,CURRENT); const now=new Date();
+  const realKey=now.getFullYear()+"-"+pad2(now.getMonth()+1);
+  if(CURRENT===realKey){
+    const todayStr=realKey+"-"+pad2(now.getDate());
+    const diff=Math.round((new Date(due+"T00:00")-new Date(todayStr+"T00:00"))/86400000);
+    if(diff<0) return {k:"over",label:"Vencido"};
+    if(diff===0) return {k:"due",label:"Vence hoje"};
+    if(diff<=5) return {k:"due",label:"Vence em "+diff+"d"};
+    return {k:"pend",label:"Vence dia "+(bill.dia||1)};
+  }
+  return {k:"pend",label:"Dia "+(bill.dia||1)};
+}
+function billRow(b, withDel){
+  const st=billState(b); const cat=CATS[b.cat]||CATS.outros;
+  const act = st.k==="paid"?`<button class="btn ghost sm" data-unpay="${b.id}">Desfazer</button>`:`<button class="btn sm" data-pay="${b.id}">Pagar</button>`;
+  return `<div class="billrow">
+    <div class="bi" style="color:${cat.color}">${st.k==="paid"?"✅":"🔔"}</div>
+    <div class="bd"><div class="t">${b.desc}</div><div class="s">${cat.label} · <span class="stt ${st.k}">${st.label}</span></div></div>
+    <div class="bval ${st.k==='paid'?'':'neg'}">${fmtShort(b.valor)}</div>
+    ${act}${withDel?`<button class="rowbtn" data-delbill="${b.id}">🗑</button>`:""}
+  </div>`;
+}
+function bindBillBtns(scope){
+  scope.querySelectorAll("[data-pay]").forEach(x=>x.onclick=()=>payBill(x.dataset.pay));
+  scope.querySelectorAll("[data-unpay]").forEach(x=>x.onclick=()=>unpayBill(x.dataset.unpay));
+  scope.querySelectorAll("[data-delbill]").forEach(x=>x.onclick=()=>delBill(x.dataset.delbill));
+}
+function renderOvBills(){
+  const el=document.getElementById("ovBills"); if(!el) return;
+  const bills=(state.bills||[]).slice().sort((a,b)=>(a.dia||1)-(b.dia||1));
+  if(!bills.length){ el.innerHTML=`<div class="empty">Nenhuma conta cadastrada. Adicione em <b>Contas a pagar</b>.</div>`; return; }
+  const pend=bills.filter(b=>!(b.paid&&b.paid[CURRENT])); const totalPend=pend.reduce((a,b)=>a+b.valor,0);
+  el.innerHTML=(pend.length? pend.slice(0,5).map(b=>billRow(b,false)).join("")
+      : `<div class="empty" style="padding:22px">Tudo pago este mês 🎉</div>`)
+    + (pend.length?`<div style="display:flex;justify-content:space-between;margin-top:12px;padding-top:11px;border-top:1px solid var(--line)"><span style="color:var(--mut)">A pagar este mês</span><b class="neg">${fmt(totalPend)}</b></div>`:"");
+  bindBillBtns(el);
+}
+function renderBills(){
+  const bills=(state.bills||[]).slice().sort((a,b)=>(a.dia||1)-(b.dia||1));
+  const totalMes=bills.reduce((a,b)=>a+b.valor,0);
+  const pagas=bills.filter(b=>b.paid&&b.paid[CURRENT]); const pagoVal=pagas.reduce((a,b)=>a+b.valor,0);
+  document.getElementById("billKpis").innerHTML=[
+    {lbl:"Contas cadastradas",val:String(bills.length),cls:"",sub:"recorrentes mensais"},
+    {lbl:"Total mensal",val:fmt(totalMes),cls:"warnc",sub:"se todas forem pagas"},
+    {lbl:"Pagas este mês",val:pagas.length+"/"+bills.length,cls:"pos",sub:fmt(pagoVal)},
+    {lbl:"A pagar este mês",val:fmt(totalMes-pagoVal),cls:"neg",sub:monthLabelLong(CURRENT)},
+  ].map(k=>`<div class="card kpi"><div class="lbl">${k.lbl}</div><div class="val ${k.cls}">${k.val}</div><div class="sub">${k.sub}</div></div>`).join("");
+  const box=document.getElementById("billsTable");
+  box.innerHTML=bills.length? bills.map(b=>billRow(b,true)).join("")
+    : `<div class="empty">Nenhuma conta a pagar. Cadastre ao lado (ex.: aluguel, energia, internet).</div>`;
+  bindBillBtns(box);
+}
+function payBill(id){
+  const b=(state.bills||[]).find(x=>x.id===id); if(!b) return; if(!b.paid) b.paid={};
+  const due=billDue(b,CURRENT); const txid=uid();
+  M().tx.push({id:txid,date:due,desc:b.desc+" (conta)",amount:b.valor,type:"out",cat:b.cat,src:"manual"});
+  b.paid[CURRENT]=txid; persist(); renderActive(); toast("Conta paga e lançada");
+}
+function unpayBill(id){
+  const b=(state.bills||[]).find(x=>x.id===id); if(!b||!b.paid||!b.paid[CURRENT]) return;
+  const txid=b.paid[CURRENT]; M().tx=M().tx.filter(t=>t.id!==txid); delete b.paid[CURRENT];
+  persist(); renderActive(); toast("Pagamento desfeito");
+}
+function delBill(id){
+  if(!confirm("Remover esta conta a pagar?")) return;
+  state.bills=(state.bills||[]).filter(b=>b.id!==id); persist(); renderActive(); toast("Conta removida");
+}
+function addBill(){
+  const desc=document.getElementById("bDesc").value.trim();
+  const valor=parseVal(document.getElementById("bVal").value);
+  const dia=Math.min(31,Math.max(1,parseInt(document.getElementById("bDay").value,10)||1));
+  const cat=document.getElementById("bCat").value||"contas";
+  if(!desc||!valor){ toast("Preencha descrição e valor"); return; }
+  state.bills=state.bills||[]; state.bills.push({id:uid(),desc,valor,cat,dia,paid:{}});
+  document.getElementById("bDesc").value=""; document.getElementById("bVal").value=""; document.getElementById("bDay").value="";
+  persist(); renderBills(); toast("Conta adicionada");
+}
+
+/* ============================ METAS ============================ */
+function metaBar(g,detail){
+  const pct=g.alvo>0?Math.min(g.guardado/g.alvo*100,100):0; const done=g.guardado>=g.alvo&&g.alvo>0;
+  const falta=Math.max(g.alvo-g.guardado,0);
+  return `<div class="metaitem">
+    <div class="mh"><span class="mn">${g.nome} ${done?"✅":""}</span>
+      <span class="mv"><b>${fmtShort(g.guardado)}</b> / ${fmtShort(g.alvo)}${detail?" · "+pct.toFixed(0)+"%":""}</span></div>
+    <div class="mprog"><div style="width:${pct}%"></div></div>
+    ${detail?`<div class="mmeta"><span class="pill">${done?"Meta atingida 🎉":"Falta "+fmt(falta)}</span>
+      <button class="btn ghost sm" data-add="${g.id}">＋ Guardar</button>
+      <button class="btn ghost sm" data-sub="${g.id}">− Retirar</button>
+      <button class="rowbtn" data-delmeta="${g.id}">🗑</button></div>`:""}
+  </div>`;
+}
+function renderOvMetas(){
+  const el=document.getElementById("ovMetas"); if(!el) return;
+  const metas=state.metas||[];
+  el.innerHTML=metas.length? metas.slice(0,3).map(g=>metaBar(g,false)).join("")
+    : `<div class="empty">Nenhuma meta. Crie objetivos em <b>Metas</b>.</div>`;
+}
+function renderMetas(){
+  const metas=state.metas||[]; const box=document.getElementById("metasList");
+  box.innerHTML=metas.length? metas.map(g=>metaBar(g,true)).join("")
+    : `<div class="empty">Nenhuma meta ainda. Crie uma ao lado (ex.: reserva de emergência).</div>`;
+  box.querySelectorAll("[data-add]").forEach(x=>x.onclick=()=>contribMeta(x.dataset.add,1));
+  box.querySelectorAll("[data-sub]").forEach(x=>x.onclick=()=>contribMeta(x.dataset.sub,-1));
+  box.querySelectorAll("[data-delmeta]").forEach(x=>x.onclick=()=>delMeta(x.dataset.delmeta));
+}
+function addMeta(){
+  const nome=document.getElementById("gName").value.trim();
+  const alvo=parseVal(document.getElementById("gAlvo").value);
+  const guardado=parseVal(document.getElementById("gGuardado").value);
+  if(!nome||!alvo){ toast("Preencha nome e valor-alvo"); return; }
+  state.metas=state.metas||[]; state.metas.push({id:uid(),nome,alvo,guardado:guardado||0});
+  document.getElementById("gName").value=""; document.getElementById("gAlvo").value=""; document.getElementById("gGuardado").value="";
+  persist(); renderMetas(); toast("Meta criada");
+}
+function contribMeta(id,sign){
+  const g=(state.metas||[]).find(x=>x.id===id); if(!g) return;
+  const v=parseVal(prompt((sign>0?"Guardar quanto nesta meta?":"Retirar quanto desta meta?")+" (R$)",""));
+  if(!v) return; g.guardado=Math.max(0, g.guardado + sign*Math.abs(v));
+  persist(); renderMetas(); toast(sign>0?"Valor guardado":"Valor retirado");
+}
+function delMeta(id){
+  if(!confirm("Remover esta meta?")) return;
+  state.metas=(state.metas||[]).filter(g=>g.id!==id); persist(); renderMetas(); toast("Meta removida");
+}
 
 /* ============================ EVENTS ============================ */
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>showTab(b.dataset.t));
@@ -930,6 +1192,9 @@ document.getElementById("addMonth").onclick=()=>{
   CURRENT=k; refreshMonths(); renderActive(); toast("Mês "+monthLabel(k)+" criado (saldo inicial herdado)");
 };
 document.getElementById("btnAdd").onclick=()=>openTx(null);
+document.getElementById("bAdd").onclick=addBill;
+document.getElementById("gAdd").onclick=addMeta;
+fillCatSelect(document.getElementById("bCat"),false); document.getElementById("bCat").value="contas";
 ["txSearch","txCat","txType","txSrc"].forEach(id=>document.getElementById(id).oninput=renderTx);
 document.getElementById("txCat").innerHTML=`<option value="">Todas categorias</option>`+Object.entries(CATS).map(([k,c])=>`<option value="${k}">${c.label}</option>`).join("");
 document.getElementById("mCancel").onclick=()=>document.getElementById("txModal").classList.remove("on");
