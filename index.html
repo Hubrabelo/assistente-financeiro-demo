@@ -72,6 +72,13 @@ input,select,textarea{font-family:inherit;font-size:14px}
 .scopesw button{background:transparent;border:0;color:var(--silver);font-weight:650;font-size:12.5px;padding:6px 12px;border-radius:8px;transition:background .15s,color .15s;white-space:nowrap}
 .scopesw button.active{background:var(--electric);color:#04121f}
 .scopesw button:not(.active):hover{color:var(--mist)}
+/* Indicador de sincronização (só aparece no modo servidor) */
+.syncstat{display:none;align-items:center;gap:7px;font-size:11px;font-weight:600;color:var(--silver);padding:6px 11px;border-radius:999px;border:1px solid rgba(180,190,205,.22);background:rgba(255,255,255,.06)}
+.syncstat.ok,.syncstat.saving,.syncstat.off{display:inline-flex}
+.syncstat::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--silver)}
+.syncstat.ok::before{background:var(--pos)}
+.syncstat.saving::before{background:var(--warn)}
+.syncstat.off::before{background:var(--neg)}
 
 /* Botão DEMO */
 .demo-btn{background:linear-gradient(135deg,var(--electric),var(--steel));border:0;color:#04121f;font-weight:750;
@@ -279,6 +286,7 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
       <select id="monthSel"></select>
       <button class="iconbtn" id="addMonth" title="Novo mês" style="width:30px;height:30px;font-size:18px">＋</button>
     </div>
+    <span id="syncStat" class="syncstat" title="Sincronização com o servidor"></span>
     <button class="demo-btn" id="btnDemo" title="Como usar o painel">✨ DEMO</button>
     <button class="iconbtn" id="btnBackup" title="Backup / Restaurar">⇩</button>
   </div>
@@ -645,17 +653,48 @@ function normWs(w){ if(!w||typeof w!=="object") w=emptyWs(); w.months=w.months||
   });
   return w; }
 function S(){ return state.scope==="pj"?state.pj:state.pf; } // workspace ativo (PF ou PJ)
+function normalizeState(s){
+  if(!s||typeof s!=="object" || (!s.pf && !s.months)) return seed();
+  if(s.months && !s.pf){ // migra formato antigo -> workspace PF
+    s={owner:s.owner||"", scope:"pf", pf:{months:s.months,metas:s.metas||[],bills:s.bills||[]}, pj:emptyWs()};
+  }
+  s.scope=(s.scope==="pj")?"pj":"pf"; s.owner=s.owner||""; s.pf=normWs(s.pf); s.pj=normWs(s.pj);
+  return s;
+}
 function load(){
-  try{ let s = JSON.parse(localStorage.getItem(LS)); if(s){
-    if(s.months && !s.pf){ // migra formato antigo -> workspace PF
-      s={owner:s.owner||"", scope:"pf", pf:{months:s.months,metas:s.metas||[],bills:s.bills||[]}, pj:emptyWs()};
-    }
-    s.scope=(s.scope==="pj")?"pj":"pf"; s.owner=s.owner||""; s.pf=normWs(s.pf); s.pj=normWs(s.pj);
-    return s;
-  } }catch(e){}
+  try{ const s = JSON.parse(localStorage.getItem(LS)); if(s) return normalizeState(s); }catch(e){}
   return seed();
 }
-function persist(){ localStorage.setItem(LS, JSON.stringify(state)); }
+
+/* ---- Sincronização com o servidor (Área do Cliente) ---- */
+const SERVER = (()=>{ try{ return new URLSearchParams(location.search).has("c"); }catch(e){ return false; } })();
+function xsrf(){ try{ const m=document.cookie.match(/XSRF-TOKEN=([^;]+)/); return m?decodeURIComponent(m[1]):""; }catch(e){ return ""; } }
+function setSyncStatus(s){ const el=document.getElementById("syncStat"); if(!el)return;
+  el.className="syncstat "+s; el.textContent = s==="saving"?"Salvando…":(s==="ok"?"Sincronizado":"Offline"); }
+let syncTimer=null;
+function syncUp(){ clearTimeout(syncTimer); setSyncStatus("saving"); syncTimer=setTimeout(doSync, 800); }
+async function doSync(){
+  try{
+    const r=await fetch("/portal/financeiro/estado",{method:"PUT",credentials:"same-origin",
+      headers:{"Content-Type":"application/json","Accept":"application/json","X-Requested-With":"XMLHttpRequest","X-XSRF-TOKEN":xsrf()},
+      body:JSON.stringify({dados:state})});
+    setSyncStatus(r.ok?"ok":"off");
+  }catch(e){ setSyncStatus("off"); }
+}
+function hasData(s){ try{ return ["pf","pj"].some(w=> s[w] && (
+    Object.values(s[w].months||{}).some(m=>m.tx&&m.tx.length) || (s[w].bills&&s[w].bills.length) || (s[w].metas&&s[w].metas.length)
+  )); }catch(e){ return false; } }
+async function bootServer(){
+  try{
+    const r=await fetch("/portal/financeiro/estado",{credentials:"same-origin",headers:{"Accept":"application/json","X-Requested-With":"XMLHttpRequest"}});
+    if(r.ok){ const j=await r.json();
+      if(j && j.dados && (j.dados.pf || j.dados.months)){ state=normalizeState(j.dados); persistLocal(); setSyncStatus("ok"); return; }
+      if(hasData(state)){ await doSync(); } else setSyncStatus("ok"); // servidor vazio: sobe o local se houver
+    } else setSyncStatus("off");
+  }catch(e){ setSyncStatus("off"); }
+}
+function persistLocal(){ try{ localStorage.setItem(LS, JSON.stringify(state)); }catch(e){} }
+function persist(){ persistLocal(); if(SERVER) syncUp(); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
 
 function seed(){ // app inicia VAZIO — pronto para receber um cliente (PF e PJ)
@@ -1458,11 +1497,14 @@ function dl(name,content,type){ const b=new Blob([content],{type}); const u=URL.
   const a=document.createElement("a"); a.href=u; a.download=name; a.click(); URL.revokeObjectURL(u); }
 
 /* ============================ INIT ============================ */
-document.querySelectorAll("#scopeSw button").forEach(b=>b.classList.toggle("active",b.dataset.scope===state.scope));
-refreshMonths();
-showTab("overview");
-// Abre o guia automaticamente no primeiro acesso quando o painel está vazio
-try{ if(!localStorage.getItem("af_seen_guide") && (!M()||!M().tx.length)){ document.getElementById("demoModal").classList.add("on"); localStorage.setItem("af_seen_guide","1"); } }catch(e){}
+function startUI(){
+  document.querySelectorAll("#scopeSw button").forEach(b=>b.classList.toggle("active",b.dataset.scope===state.scope));
+  refreshMonths();
+  showTab("overview");
+  // Abre o guia automaticamente no primeiro acesso quando o painel está vazio
+  try{ if(!localStorage.getItem("af_seen_guide") && (!M()||!M().tx.length)){ document.getElementById("demoModal").classList.add("on"); localStorage.setItem("af_seen_guide","1"); } }catch(e){}
+}
+if(SERVER){ setSyncStatus("saving"); bootServer().finally(startUI); } else { startUI(); }
 </script>
 </body>
 </html>
