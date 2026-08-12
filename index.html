@@ -142,6 +142,27 @@ input,select,textarea{font-family:inherit;font-size:14px}
 .cardlim{height:7px;background:var(--card);border-radius:5px;overflow:hidden;margin-top:10px}
 .cardlim>div{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--acc),var(--acc2))}
 
+/* Conciliação */
+.dup{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.dup:last-child{border-bottom:0}
+.dinfo{flex:1;min-width:170px}
+.dtx{font-size:12.5px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dtx+.dtx{margin-top:3px;color:var(--mut)}
+.damt{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dact{display:flex;gap:6px}
+.crow{display:flex;align-items:center;gap:12px;padding:9px 2px;border-bottom:1px solid var(--line)}
+.crow:last-child{border-bottom:0}
+.crow.done{opacity:.6}
+.crow .chk{position:relative;display:inline-flex;cursor:pointer;flex:none}
+.crow .chk input{position:absolute;opacity:0;width:20px;height:20px;cursor:pointer;margin:0}
+.crow .chk span{width:20px;height:20px;border:1.5px solid var(--line2);border-radius:6px;display:inline-block;position:relative;transition:.15s}
+.crow .chk input:checked+span{background:var(--pos);border-color:var(--pos)}
+.crow .chk input:checked+span::after{content:"✓";position:absolute;inset:0;color:#04121f;font-size:13px;font-weight:800;display:grid;place-items:center}
+.crow .cinfo{flex:1;min-width:0}
+.crow .ct{font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crow .cs{color:var(--mut);font-size:11.5px;margin-top:1px}
+.crow .camt{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+
 /* Resumo do mês (WhatsApp) */
 .resumo{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:15px;font-family:'Inter',-apple-system,sans-serif;font-size:12.5px;white-space:pre-wrap;color:var(--txt);max-height:52vh;overflow:auto;line-height:1.6}
 
@@ -307,6 +328,7 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
   <div class="tabs" id="tabs">
     <button class="tab active" data-t="overview">📊 Visão Geral</button>
     <button class="tab" data-t="tx">📋 Lançamentos</button>
+    <button class="tab" data-t="concil">🔁 Conciliação</button>
     <button class="tab" data-t="card">💳 Cartão</button>
     <button class="tab" data-t="bills">🔔 Contas a pagar</button>
     <button class="tab" data-t="budget">🎯 Orçamento</button>
@@ -377,6 +399,25 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
         <button class="btn" id="btnAdd">＋ Lançamento</button>
       </div>
       <div id="txTable"></div>
+    </div>
+  </section>
+
+  <!-- CONCILIAÇÃO -->
+  <section id="v-concil" class="hidden">
+    <div class="grid kpis" id="concilKpis" style="margin-bottom:14px"></div>
+    <div class="grid two" style="margin-bottom:14px">
+      <div class="card">
+        <h3>Conferência de saldo <span class="hint">extrato × painel</span></h3>
+        <div id="concilSaldo"></div>
+      </div>
+      <div class="card">
+        <h3>Duplicados suspeitos <span class="hint">mesmo valor · datas próximas</span></h3>
+        <div id="concilDup"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Conferência dos lançamentos <button class="btn ghost sm" id="concilAll" style="margin-left:auto">✓ Marcar todos como conferidos</button></h3>
+      <div id="concilList"></div>
     </div>
   </section>
 
@@ -1334,7 +1375,7 @@ function switchScope(sc){
 let activeTab="overview";
 function showTab(t){ activeTab=t;
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.t===t));
-  ["overview","tx","card","bills","budget","metas","import"].forEach(v=>document.getElementById("v-"+v).classList.toggle("hidden",v!==t));
+  ["overview","tx","concil","card","bills","budget","metas","import"].forEach(v=>document.getElementById("v-"+v).classList.toggle("hidden",v!==t));
   renderActive();
 }
 function renderActive(){
@@ -1344,6 +1385,7 @@ function renderActive(){
   else if(activeTab==="bills")renderBills();
   else if(activeTab==="budget")renderBudget();
   else if(activeTab==="metas")renderMetas();
+  else if(activeTab==="concil")renderConcil();
 }
 function renderAll(){ refreshMonths(); renderActive(); if(activeTab!=="overview"){} }
 
@@ -1564,6 +1606,62 @@ function delAccount(id){
   S().accounts=accs; persist(); renderAccList(); renderActive(); toast("Conta removida");
 }
 
+/* ============================ CONCILIAÇÃO ============================ */
+function dupPairs(){
+  const m=M(); const ig=new Set(m.dupIgnore||[]); const tx=m.tx; const pairs=[];
+  for(let i=0;i<tx.length;i++)for(let j=i+1;j<tx.length;j++){
+    const a=tx[i],b=tx[j];
+    if(a.type===b.type && Math.round(a.amount*100)===Math.round(b.amount*100)){
+      const diff=Math.abs((new Date(a.date+"T00:00")-new Date(b.date+"T00:00"))/86400000);
+      if(diff<=3){ const key=[a.id,b.id].sort().join("|"); if(!ig.has(key)) pairs.push({a,b,key}); }
+    }
+  }
+  return pairs;
+}
+function renderConcil(){
+  const m=M(); if(!m.dupIgnore) m.dupIgnore=[];
+  const t=totals(); const tot=m.tx.length, ok=m.tx.filter(x=>x.ok).length;
+  const pairs=dupPairs(); const se=m.saldoExtrato;
+  const diff=(se!=null)?(t.balance-se):null; const confere=diff!=null&&Math.abs(diff)<0.005;
+  document.getElementById("concilKpis").innerHTML=[
+    {lbl:"Conferidos",val:ok+"/"+tot,cls:(tot>0&&ok===tot)?"pos":"",sub:"lançamentos revisados"},
+    {lbl:"Duplicados suspeitos",val:String(pairs.length),cls:pairs.length?"warnc":"pos",sub:pairs.length?"revise ao lado":"nenhum"},
+    {lbl:"Saldo do extrato",val:se!=null?fmt(se):"—",cls:"",sub:"informe ao lado"},
+    {lbl:"Diferença",val:diff!=null?fmt(diff):"—",cls:diff==null?"":(confere?"pos":"neg"),sub:diff==null?"informe o saldo":(confere?"confere ✅":"revisar ⚠️")},
+  ].map(k=>`<div class="card kpi"><div class="lbl">${k.lbl}</div><div class="val ${k.cls}">${k.val}</div><div class="sub">${k.sub}</div></div>`).join("");
+
+  const cs=document.getElementById("concilSaldo");
+  cs.innerHTML=`<div class="fld"><label>Saldo do extrato no fim do mês (R$)</label>
+      <input class="inp" id="saldoExtInp" inputmode="decimal" value="${se!=null?fmtShort(se):''}" placeholder="0,00" style="width:100%"></div>
+    <div style="display:flex;justify-content:space-between;padding:9px 0;border-top:1px solid var(--line)"><span style="color:var(--mut)">Saldo calculado (painel)</span><b>${fmt(t.balance)}</b></div>
+    ${se!=null?`<div style="display:flex;justify-content:space-between;padding:2px 0 10px"><span style="color:var(--mut)">Diferença</span><b class="${confere?'pos':'neg'}">${fmt(diff)}</b></div>
+      ${confere?`<div class="note" style="border-left:3px solid var(--pos)">✅ Tudo certo — o painel bate com o extrato.</div>`:`<div class="note" style="border-left:3px solid var(--warn)">⚠️ Diferença de ${fmt(Math.abs(diff))}. Verifique lançamentos faltando, a mais ou duplicados.</div>`}`
+    :`<div class="note">Informe o saldo final do seu extrato para conferir se o painel bate.</div>`}`;
+  const si=document.getElementById("saldoExtInp");
+  si.onchange=()=>{ const v=si.value.trim(); M().saldoExtrato=(v===""?null:parseVal(v)); persist(); renderConcil(); };
+
+  const cd=document.getElementById("concilDup");
+  cd.innerHTML=pairs.length?pairs.map(p=>`<div class="dup">
+      <div class="dinfo">
+        <div class="dtx">${brDate(p.a.date)} · ${p.a.desc} <span class="src">${p.a.src}</span></div>
+        <div class="dtx">${brDate(p.b.date)} · ${p.b.desc} <span class="src">${p.b.src}</span></div></div>
+      <div class="damt ${p.a.type==='in'?'pos':'neg'}">${fmtShort(p.a.amount)}</div>
+      <div class="dact"><button class="btn danger sm" data-dupdel="${p.b.id}" data-dupkey="${p.key}">Remover 2º</button>
+        <button class="btn ghost sm" data-dupign="${p.key}">Não é</button></div>
+    </div>`).join(""):`<div class="empty" style="padding:26px">Nenhum duplicado suspeito 🎉</div>`;
+  cd.querySelectorAll("[data-dupdel]").forEach(b=>b.onclick=()=>{ M().tx=M().tx.filter(x=>x.id!==b.dataset.dupdel); (M().dupIgnore=M().dupIgnore||[]).push(b.dataset.dupkey); persist(); renderConcil(); toast("Duplicado removido"); });
+  cd.querySelectorAll("[data-dupign]").forEach(b=>b.onclick=()=>{ (M().dupIgnore=M().dupIgnore||[]).push(b.dataset.dupign); persist(); renderConcil(); });
+
+  const cl=document.getElementById("concilList");
+  const rows=m.tx.slice().sort((a,b)=>a.date<b.date?1:-1);
+  cl.innerHTML=rows.length?rows.map(x=>`<div class="crow ${x.ok?'done':''}">
+      <label class="chk"><input type="checkbox" data-ok="${x.id}" ${x.ok?'checked':''}><span></span></label>
+      <div class="cinfo"><div class="ct">${x.desc}</div><div class="cs">${brDate(x.date)} · ${CATS[x.cat].label} · <span class="src">${x.src}</span></div></div>
+      <div class="camt ${x.type==='in'?'pos':'neg'}">${x.type==='in'?'+':'−'} ${fmtShort(x.amount)}</div>
+    </div>`).join(""):`<div class="empty">Sem lançamentos neste mês.</div>`;
+  cl.querySelectorAll("[data-ok]").forEach(c=>c.onchange=()=>{ const x=M().tx.find(y=>y.id===c.dataset.ok); if(x)x.ok=c.checked; persist(); renderConcil(); });
+}
+
 /* ============================ EVENTS ============================ */
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>showTab(b.dataset.t));
 document.querySelectorAll("#scopeSw button").forEach(b=>b.onclick=()=>switchScope(b.dataset.scope));
@@ -1578,6 +1676,7 @@ document.getElementById("addMonth").onclick=()=>{
 document.getElementById("btnAdd").onclick=()=>openTx(null);
 document.getElementById("bAdd").onclick=addBill;
 document.getElementById("gAdd").onclick=addMeta;
+document.getElementById("concilAll").onclick=()=>{ M().tx.forEach(x=>x.ok=true); persist(); renderConcil(); toast("Todos conferidos"); };
 fillCatSelect(document.getElementById("bCat"),false); document.getElementById("bCat").value="contas";
 ["txSearch","txCat","txType","txSrc"].forEach(id=>document.getElementById(id).oninput=renderTx);
 document.querySelectorAll("#txViewSw button").forEach(b=>b.onclick=()=>{ txView=b.dataset.view;
