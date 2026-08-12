@@ -142,6 +142,9 @@ input,select,textarea{font-family:inherit;font-size:14px}
 .cardlim{height:7px;background:var(--card);border-radius:5px;overflow:hidden;margin-top:10px}
 .cardlim>div{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--acc),var(--acc2))}
 
+/* Resumo do mês (WhatsApp) */
+.resumo{background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:15px;font-family:'Inter',-apple-system,sans-serif;font-size:12.5px;white-space:pre-wrap;color:var(--txt);max-height:52vh;overflow:auto;line-height:1.6}
+
 /* Contas bancárias */
 .acctrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;font-size:13.5px}
 .acctrow .an{display:flex;align-items:center;gap:9px;color:var(--txt);min-width:0}
@@ -570,6 +573,21 @@ code{background:var(--card2);padding:1px 6px;border-radius:5px;font-size:12px}
       <button class="btn" id="aAdd" style="margin-top:10px">＋ Adicionar conta</button>
     </div>
     <div class="mact"><button class="btn ghost" id="accClose">Fechar</button></div>
+  </div>
+</div>
+
+<!-- Modal: resumo do mês (WhatsApp) -->
+<div class="ov" id="resumoModal">
+  <div class="modal" style="max-width:480px">
+    <h3>📲 Resumo do mês</h3>
+    <p style="color:var(--mut);font-size:13px;margin:-8px 0 12px">Pré-visualização. Envie no WhatsApp (você escolhe o contato) ou copie o texto.</p>
+    <pre id="resumoTxt" class="resumo"></pre>
+    <div class="mact">
+      <button class="btn ghost" id="resumoClose">Fechar</button>
+      <div style="flex:1"></div>
+      <button class="btn ghost" id="resumoCopy">📋 Copiar</button>
+      <button class="btn" id="resumoWa">📲 WhatsApp</button>
+    </div>
   </div>
 </div>
 
@@ -1350,8 +1368,34 @@ function renderGreet(){
   if(hasBudget && !over) badges.push(`<span class="badge ok">🎯 orçamento em dia</span>`);
   const bills=S().bills||[]; if(bills.length){ const pagas=bills.filter(b=>b.paid&&b.paid[CURRENT]).length;
     badges.push(`<span class="badge">🔔 ${pagas}/${bills.length} contas pagas</span>`); }
-  el.innerHTML=`<div class="greet"><div><div class="g1">${ola}</div><div class="g2">Resumo de ${monthLabelLong(CURRENT)}.</div></div><div class="badges">${badges.join("")}</div></div>`;
+  el.innerHTML=`<div class="greet"><div><div class="g1">${ola}</div><div class="g2">Resumo de ${monthLabelLong(CURRENT)}.</div></div>
+    <div class="badges">${badges.join("")}<button class="btn ghost sm" id="btnResumo">📲 Resumo do mês</button></div></div>`;
+  const br=document.getElementById("btnResumo"); if(br) br.onclick=openResumo;
 }
+// Gera o texto do resumo do mês (formato WhatsApp). Estruturado para reuso futuro no servidor.
+function gerarResumo(){
+  const t=totals(); const net=t.bankIn-t.bankOut; const nome=nomeCliente(); const accs=S().accounts||[];
+  const L=[];
+  L.push("💠 HUB RABELO · Assistente Financeiro");
+  L.push(`Resumo de ${monthLabelLong(CURRENT)} — ${scopeLabel()}`);
+  if(nome) L.push(`Cliente: ${nome}`);
+  L.push("");
+  L.push(`💰 Saldo em conta: ${fmt(t.balance)}`);
+  L.push(`📈 Entradas: ${fmt(t.bankIn)}`);
+  L.push(`📉 Saídas: ${fmt(t.bankOut)}`);
+  L.push(`${net>=0?"✅":"⚠️"} Resultado do mês: ${net>=0?"+":""}${fmt(net)}`);
+  if(accs.length>1){ L.push(""); L.push("🏦 Contas"); accs.forEach(a=>L.push(`• ${a.nome}: ${fmt(t.accBal[a.id]||0)}`)); }
+  const cft=cardTotal(); if(cft>0){ L.push(""); L.push(`💳 Fatura do cartão: ${fmt(cft)}`); }
+  const pend=(S().bills||[]).filter(b=>!(b.paid&&b.paid[CURRENT])).sort((a,b)=>(a.dia||1)-(b.dia||1));
+  if(pend.length){ L.push(""); L.push("🔔 A pagar este mês"); pend.slice(0,6).forEach(b=>L.push(`• ${b.desc} (dia ${b.dia}): ${fmt(b.valor)}`));
+    L.push(`Total a pagar: ${fmt(pend.reduce((a,b)=>a+b.valor,0))}`); }
+  const metas=S().metas||[]; if(metas.length){ L.push(""); L.push("🎯 Metas"); metas.slice(0,4).forEach(g=>{const p=g.alvo>0?Math.round(g.guardado/g.alvo*100):0; L.push(`• ${g.nome}: ${p}% (${fmtShort(g.guardado)}/${fmtShort(g.alvo)})`);}); }
+  const ent=Object.entries(t.spend).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  if(ent.length){ L.push(""); L.push("🏷️ Onde mais gastou"); ent.forEach(([c,v])=>L.push(`• ${CATS[c].label}: ${fmt(v)}`)); }
+  L.push(""); L.push("— Enviado pelo seu painel HUB RABELO");
+  return L.join("\n");
+}
+function openResumo(){ document.getElementById("resumoTxt").textContent=gerarResumo(); document.getElementById("resumoModal").classList.add("on"); }
 
 /* ============================ CONTAS A PAGAR ============================ */
 function daysInMonth(key){ const [y,mm]=key.split("-").map(Number); return new Date(y,mm,0).getDate(); }
@@ -1575,6 +1619,13 @@ document.getElementById("bkClose").onclick=()=>document.getElementById("bkModal"
 document.getElementById("aAdd").onclick=addAccount;
 document.getElementById("accClose").onclick=()=>document.getElementById("accModal").classList.remove("on");
 document.getElementById("accModal").onclick=e=>{ if(e.target.id==="accModal")e.target.classList.remove("on"); };
+document.getElementById("resumoClose").onclick=()=>document.getElementById("resumoModal").classList.remove("on");
+document.getElementById("resumoModal").onclick=e=>{ if(e.target.id==="resumoModal")e.target.classList.remove("on"); };
+document.getElementById("resumoWa").onclick=()=>{ window.open("https://api.whatsapp.com/send?text="+encodeURIComponent(gerarResumo()),"_blank"); };
+document.getElementById("resumoCopy").onclick=()=>{ const txt=gerarResumo();
+  const ok=()=>toast("Resumo copiado");
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(ok).catch(()=>fallbackCopy(txt,ok)); } else fallbackCopy(txt,ok); };
+function fallbackCopy(txt,ok){ try{ const ta=document.createElement("textarea"); ta.value=txt; ta.style.position="fixed"; ta.style.opacity="0"; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); ok(); }catch(e){ toast("Não foi possível copiar"); } }
 document.getElementById("bkExport").onclick=()=>dl("backup-financeiro-"+CURRENT+".json",JSON.stringify(state,null,2),"application/json");
 document.getElementById("bkImportBtn").onclick=()=>document.getElementById("bkFile").click();
 document.getElementById("bkFile").onchange=e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); document.getElementById("bkModal").classList.remove("on"); };
